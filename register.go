@@ -18,6 +18,7 @@ const (
 	OK RegisterState = "OK"
 	BadPassword RegisterState = "BadPassword"
 	UserExists RegisterState = "UserExists"
+	UserDoesntExists RegisterState = "UserDoesntExists"
 	UserNotInLPDB RegisterState = "UserNotInLPDB"
 )
 
@@ -34,19 +35,31 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 	switch handleUser(nickname, serverpasswd, db) {
 	case OK :
-		fmt.Fprintf(w, "OK")
-
 		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, "Changed Perms")
+
+		return
 
 	case BadPassword: 
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "Bad Password")
+
+		return
 	case UserExists:
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusExpectationFailed)
 		fmt.Fprintf(w, "User Exists in registered db")
+
+		return
 	case UserNotInLPDB:
 		w.WriteHeader(http.StatusConflict)
 		fmt.Fprintf(w, "User not in LP DB")
+		return
+
+	case UserDoesntExists:
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "User not in REG DB")
+		return
+
 	default:
 		w.WriteHeader(http.StatusTeapot)
 		fmt.Fprintf(w, "chuj w sumie wie")
@@ -79,7 +92,10 @@ func handleUser(name string, hash string, db *sql.DB) RegisterState {
 
 			defer lpDB.Close()
 
-			if userInLPDBase(name, lpDB) && !userAlreadyRegistered(name, db) {
+			isInLPDB := userInLPDBase(name, lpDB)
+			isInRegDB := userAlreadyRegistered(name, db)
+
+			if isInLPDB && !isInRegDB {
 				
 				var uuid string
 				lpDB.QueryRow(`select uuid from luckperms_players where username = ?`, name).Scan(&uuid)
@@ -95,8 +111,8 @@ func handleUser(name string, hash string, db *sql.DB) RegisterState {
 				}
 				
 				return OK;
+
 			} 
-			
 			
 			return UserNotInLPDB;
 		}
