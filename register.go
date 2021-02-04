@@ -9,6 +9,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type RegisterState string
+
+// registration states
+const (
+	OK RegisterState = "OK"
+	BadPassword RegisterState = "BadPassword"
+	UserExists RegisterState = "UserExists"
+	UserNotInLPDB RegisterState = "UserNotInLPDB"
+)
+
 func register(w http.ResponseWriter, r *http.Request) {
 	db, err := conntectToDB("./bfs")
 	if err != nil {
@@ -18,10 +28,21 @@ func register(w http.ResponseWriter, r *http.Request) {
 	nickname := r.FormValue("mcnm")
 	serverpasswd := md5Hash(r.FormValue("srvpw"))
 
-	handleUser(nickname, serverpasswd, db)
+	switch handleUser(nickname, serverpasswd, db) {
+	case OK :
+		fmt.Fprintf(w, "OK")
+	case BadPassword: 
+		fmt.Fprintf(w, "Bad Password")
+	case UserExists:
+		fmt.Fprintf(w, "User Exists")
+	case UserNotInLPDB:
+		fmt.Fprintf(w, "User not in LP DB")
+	default:
+		fmt.Fprintf(w, "chuj w sumie wie")
+	}
 }
 
-func handleUser(name string, hash string, db *sql.DB) bool {
+func handleUser(name string, hash string, db *sql.DB) RegisterState {
 	rows, err := db.Query(`select count(*) from player where nick = ?`, name)
 
 	if err != nil {
@@ -30,27 +51,41 @@ func handleUser(name string, hash string, db *sql.DB) bool {
 
 	defer rows.Close()
 
-	if checkRowCount(rows) == 0 {
-		var passwd string
-		db.QueryRow(`select password from serverpassword`).Scan(&passwd)
+	var passwd string
+	db.QueryRow(`select password from serverpassword`).Scan(&passwd)
 
+	userCount := checkRowCount(rows)
+
+	if userCount == 0 {
 		if hash == passwd {
-			var lastid int
-			db.QueryRow(`select max(id) from player`).Scan(&lastid)
-
-			fmt.Println(lastid)
-
-			_, insertErr := db.Exec(`insert into player values(?, ?)`,lastid+1, name)
-			if insertErr != nil {
-				panic(insertErr)
+			
+			lpDB, lpdbErr := conntectToDB("./luckperms-sqlite.db")
+			if lpdbErr != nil {
+				panic(lpdbErr)
 			}
 
-			return true;
+			if userInLPDBase(name, lpDB) && !userAlreadyRegistered(name, db) {
+				var lastid int
+				db.QueryRow(`select max(id) from player`).Scan(&lastid)
+
+				_, insertErr := db.Exec(`insert into player values(?, ?)`,lastid+1, name)
+				if insertErr != nil {
+					panic(insertErr)
+				}
+				
+				return OK;
+			} 
+			
+			
+			return UserNotInLPDB;
 		}
 
-		return false;
-	} 
-		return false;
+		return BadPassword;
+
+	} else if userCount > 0 && hash != passwd {
+		return BadPassword
+	}
+		return UserExists;
 }
 
 func conntectToDB(connstring string) (*sql.DB, error) {
@@ -68,6 +103,13 @@ func checkRowCount(rows *sql.Rows) (count int) {
 	}
 
 	return count
+}
+
+func userAlreadyRegistered(name string, db *sql.DB) bool {
+	var count int
+	db.QueryRow(`select count(*) from player where nick = ?`, name).Scan(&count)
+
+	return count > 0
 }
 
 func md5Hash(text string) string {

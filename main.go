@@ -31,14 +31,7 @@ func main() {
 
 	http.Handle("/", http.StripPrefix("/", fs))
 
-	http.HandleFunc("/usrauth", func (w http.ResponseWriter, r *http.Request)  {
-		name := r.FormValue("mcnm")
-		serverPassword := r.FormValue("srvpw")
-
-		fmt.Println(name  + " - " + serverPassword)
-
-		fmt.Fprintf(w, name)
-	})
+	http.HandleFunc("/usrauth", register)
 
 	err := http.ListenAndServe(":9000", nil)
 
