@@ -1,11 +1,13 @@
 package main
 
 import (
-	"database/sql"
 	"crypto/md5"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -25,24 +27,35 @@ func register(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
+	defer db.Close()
+
 	nickname := r.FormValue("mcnm")
 	serverpasswd := md5Hash(r.FormValue("srvpw"))
 
 	switch handleUser(nickname, serverpasswd, db) {
 	case OK :
 		fmt.Fprintf(w, "OK")
+
+		w.WriteHeader(http.StatusCreated)
+
 	case BadPassword: 
+		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "Bad Password")
 	case UserExists:
-		fmt.Fprintf(w, "User Exists")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "User Exists in registered db")
 	case UserNotInLPDB:
+		w.WriteHeader(http.StatusConflict)
 		fmt.Fprintf(w, "User not in LP DB")
 	default:
+		w.WriteHeader(http.StatusTeapot)
 		fmt.Fprintf(w, "chuj w sumie wie")
 	}
 }
 
 func handleUser(name string, hash string, db *sql.DB) RegisterState {
+	name = strings.ToLower(name)
+
 	rows, err := db.Query(`select count(*) from player where nick = ?`, name)
 
 	if err != nil {
@@ -64,7 +77,15 @@ func handleUser(name string, hash string, db *sql.DB) RegisterState {
 				panic(lpdbErr)
 			}
 
+			defer lpDB.Close()
+
 			if userInLPDBase(name, lpDB) && !userAlreadyRegistered(name, db) {
+				
+				var uuid string
+				lpDB.QueryRow(`select uuid from luckperms_players where username = ?`, name).Scan(&uuid)
+
+				changePermissions(uuid, "paleciak", lpDB)
+
 				var lastid int
 				db.QueryRow(`select max(id) from player`).Scan(&lastid)
 
@@ -83,8 +104,10 @@ func handleUser(name string, hash string, db *sql.DB) RegisterState {
 		return BadPassword;
 
 	} else if userCount > 0 && hash != passwd {
+
 		return BadPassword
 	}
+
 		return UserExists;
 }
 
