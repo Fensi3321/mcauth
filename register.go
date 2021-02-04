@@ -22,8 +22,13 @@ const (
 	UserNotInLPDB RegisterState = "UserNotInLPDB"
 )
 
+const (
+	regDBLoc = "./bfs"
+	lpDBLoc = "./luckperms-sqlite.db"
+)
+
 func register(w http.ResponseWriter, r *http.Request) {
-	db, err := conntectToDB("./bfs")
+	db, err := conntectToDB(regDBLoc)
 	if err != nil {
 		panic(err)
 	}
@@ -85,7 +90,7 @@ func handleUser(name string, hash string, db *sql.DB) RegisterState {
 	if userCount == 0 {
 		if hash == passwd {
 			
-			lpDB, lpdbErr := conntectToDB("./luckperms-sqlite.db")
+			lpDB, lpdbErr := conntectToDB(lpDBLoc)
 			if lpdbErr != nil {
 				panic(lpdbErr)
 			}
