@@ -67,7 +67,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		w.WriteHeader(http.StatusTeapot)
-		fmt.Fprintf(w, "chuj w sumie wie")
+		fmt.Fprintf(w, "idk")
 	}
 }
 
